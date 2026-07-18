@@ -87,21 +87,16 @@ class Embedder:
         return np.vstack(out)
 
 
-def main():
-    p = argparse.ArgumentParser(description="Torch-free multilingual semantic recap matcher")
-    p.add_argument("transcript")
-    p.add_argument("recap")
-    p.add_argument("-o", "--output", default="matches_onnx.csv")
-    p.add_argument("--window-segments", type=int, default=8)
-    p.add_argument("--stride", type=int, default=3)
-    p.add_argument("--enforce-order", action="store_true")
-    p.add_argument("--backtrack-slack", type=float, default=30.0)
-    p.add_argument("--flag-below", type=float, default=0.35)
-    args = p.parse_args()
-
-    segments = load_transcript(args.transcript)
-    recap_lines = load_recap_lines(args.recap)
-    windows = build_windows(segments, args.window_segments, args.stride)
+def run_match(transcript_path, beats_path, out_path, window_segments=8, stride=3,
+              enforce_order=False, backtrack_slack=30.0, flag_below=0.35):
+    """Pipeline stage: semantic-match each beat to a transcript window."""
+    segments = load_transcript(transcript_path)
+    recap_lines = load_recap_lines(beats_path)
+    if not segments:
+        raise SystemExit(f"Transcript is empty: {transcript_path}")
+    if not recap_lines:
+        raise SystemExit(f"Beats file is empty: {beats_path}")
+    windows = build_windows(segments, window_segments, stride)
     print(f"{len(recap_lines)} recap beats, {len(windows)} transcript windows")
 
     emb = Embedder()
@@ -112,10 +107,10 @@ def main():
     sims = rec_vecs @ win_vecs.T                                  # cosine (both normalized)
 
     results = []
-    cursor = -args.backtrack_slack
+    cursor = -backtrack_slack
     for i, line in enumerate(recap_lines):
         row = sims[i].copy()
-        if args.enforce_order:
+        if enforce_order:
             for j, w in enumerate(windows):
                 if w["start"] < cursor:
                     row[j] = -1.0
@@ -128,19 +123,34 @@ def main():
             "confidence": round(float(sims[i][j]), 3),
             "matched_transcript": best["text"][:160],
         })
-        if args.enforce_order:
-            cursor = best["start"] - args.backtrack_slack
+        if enforce_order:
+            cursor = best["start"] - backtrack_slack
 
-    with open(args.output, "w", newline="", encoding="utf-8") as f:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["recap_line", "start", "end", "confidence", "matched_transcript"])
         w.writeheader()
         w.writerows(results)
-    print(f"\nWrote {len(results)} matches to {args.output}")
-    low = [r for r in results if r["confidence"] < args.flag_below]
+    print(f"\nWrote {len(results)} matches to {out_path}")
+    low = [r for r in results if r["confidence"] < flag_below]
     if low:
-        print(f"[!] {len(low)} below {args.flag_below}:")
+        print(f"[!] {len(low)} below {flag_below}:")
         for r in low:
             print(f"  [{r['start']}s] conf {r['confidence']} {r['recap_line'][:55]}")
+
+
+def main():
+    p = argparse.ArgumentParser(description="Torch-free multilingual semantic recap matcher")
+    p.add_argument("transcript")
+    p.add_argument("recap")
+    p.add_argument("-o", "--output", default="matches_onnx.csv")
+    p.add_argument("--window-segments", type=int, default=8)
+    p.add_argument("--stride", type=int, default=3)
+    p.add_argument("--enforce-order", action="store_true")
+    p.add_argument("--backtrack-slack", type=float, default=30.0)
+    p.add_argument("--flag-below", type=float, default=0.35)
+    args = p.parse_args()
+    run_match(args.transcript, args.recap, args.output, args.window_segments,
+              args.stride, args.enforce_order, args.backtrack_slack, args.flag_below)
 
 
 if __name__ == "__main__":
