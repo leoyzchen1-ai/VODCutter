@@ -23,9 +23,13 @@ work in any terminal and the Resolve menu script is in place.
   (~490 MB) auto-download on the customer's first `cutter run` — both stages
   already do this natively via huggingface_hub / faster-whisper. Installer
   stays ~300–500 MB.
-- **GPU:** CPU-only bundle. No NVIDIA cuDNN/cuBLAS wheels (~800 MB+ saved).
-  `device = "auto"` already degrades to CPU; the CPU slowness warning already
-  exists.
+- **GPU:** offered as an **installer checkbox component** ("GPU acceleration
+  (NVIDIA)", unchecked by default). When selected, the NVIDIA cuDNN/cuBLAS
+  libraries ship into the app's own runtime and `device = "auto"` picks the GPU
+  automatically. The component's files ride inside the installer, so
+  `VODCutterSetup.exe` is ~1.5–2 GB even for CPU-only customers — accepted
+  trade-off for a one-click GPU story. Without the component, CPU works out of
+  the box (the CPU slowness warning already exists).
 - **Default model:** installer writes a global config with `model = "small"`
   so CPU transcription of a long VOD stays tolerable; customers can raise it.
 
@@ -44,6 +48,7 @@ work in any terminal and the Resolve menu script is in place.
 |---|---|
 | Install dir | `%LOCALAPPDATA%\VODCutter` — per-user, `PrivilegesRequired=lowest`, no UAC/admin |
 | Payload | `python\` (embeddable runtime + site-packages with all deps + cutter), `cutter.cmd`, `resolve_cut.lua`, `config-default.toml` |
+| GPU component | Optional checkbox "GPU acceleration (NVIDIA)" (default off): lays the pip `nvidia-cudnn-cu12` / `nvidia-cublas-cu12` DLL trees into `{app}\python\Lib\site-packages\nvidia\` |
 | PATH | Appends the install dir to the **user** PATH (registry `HKCU\Environment`), no duplicates on reinstall |
 | Resolve script | Copies `resolve_cut.lua` to `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\` (dir created if missing) |
 | Global config | Copies `config-default.toml` → `%APPDATA%\cutter\config.toml` **only if absent** (`onlyifdoesntexist`) — never clobbers an existing config |
@@ -54,12 +59,18 @@ work in any terminal and the Resolve menu script is in place.
 ```bat
 @echo off
 set "HF_HOME=%~dp0models"
+if exist "%~dp0python\Lib\site-packages\nvidia\cudnn\bin" (
+  set "PATH=%~dp0python\Lib\site-packages\nvidia\cudnn\bin;%~dp0python\Lib\site-packages\nvidia\cublas\bin;%PATH%"
+)
 "%~dp0python\python.exe" -m cutter %*
 ```
 
 `HF_HOME` is set **per-process only** — both models cache under
 `<install dir>\models\`, and user-wide env vars are never touched (no collision
-with a dev setup that has its own HF_HOME).
+with a dev setup that has its own HF_HOME). The `nvidia` PATH prepend is how
+ctranslate2 finds cuDNN/cuBLAS when the GPU component was installed; when it
+wasn't, the `if exist` is false and nothing changes — no cutter code changes
+needed for either path.
 
 ### `config-default.toml`
 
@@ -92,9 +103,13 @@ installer/
 4. `payload\python\python.exe -m pip install -r ..\requirements.txt` **minus
    dev-only lines** (pytest excluded) plus the cutter package itself
    (`pip install <repo root>` — a normal, non-editable install).
-5. Stage `cutter.cmd`, `resolve_cut.lua` (from repo root), `config-default.toml`.
-6. Smoke-test the payload in isolation (see Verification).
-7. Compile: `iscc vodcutter.iss` → `installer\Output\VODCutterSetup.exe`.
+5. Stage the GPU component separately: `pip install --target payload\gpu`
+   `nvidia-cudnn-cu12` + `nvidia-cublas-cu12` (pinned versions per the
+   faster-whisper/ctranslate2 CUDA 12 requirements) — kept OUT of
+   `payload\python\` so the wizard checkbox controls whether they land.
+6. Stage `cutter.cmd`, `resolve_cut.lua` (from repo root), `config-default.toml`.
+7. Smoke-test the payload in isolation (see Verification).
+8. Compile: `iscc vodcutter.iss` → `installer\Output\VODCutterSetup.exe`.
 
 Version is read from `pyproject.toml` and passed to Inno (`AppVersion`,
 setup filename `VODCutterSetup-<version>.exe`).
@@ -107,6 +122,9 @@ setup filename `VODCutterSetup-<version>.exe`).
 - `AppName=VODCutter`, `AppVersion` injected, `DefaultDirName={localappdata}\VODCutter`
 - `PrivilegesRequired=lowest`, `ArchitecturesAllowed=x64compatible`
 - Files: payload tree → `{app}`
+- `[Components]`: `core` (fixed) and `gpu` ("GPU acceleration (NVIDIA) —
+  requires an NVIDIA GPU", unchecked by default); `payload\gpu\nvidia\*` →
+  `{app}\python\Lib\site-packages\nvidia\` with `Components: gpu`
 - Registry: append `{app}` to `HKCU\Environment\Path` if not present (with
   `ChangesEnvironment=yes` so Explorer broadcasts the change)
 - `[Files]` entry for the Resolve Lua → `{userappdata}\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\`
@@ -133,12 +151,15 @@ setup filename `VODCutterSetup-<version>.exe`).
    subcommands; a scratch job with a `recap.txt` runs the `beatify` stage
    (`python -m cutter beatify <job>`) proving pysbd + the package import work
    without the dev venv. `HF_HOME` pointed at a scratch dir.
-2. **Real install test (manual, on the dev machine):** run the built setup,
-   which installs to `%LOCALAPPDATA%\VODCutter` (isolated from
-   `D:\CutterDavinci`); in a fresh terminal run `cutter new e2etest`, add a
-   short real `.mp4` + recap, `cutter run e2etest` — confirms the first-run
-   model download into `<install>\models\` and the full CPU pipeline; verify
-   the Resolve script was copied and `config.toml` written.
+2. **Real install test (manual, on the dev machine):** run the built setup
+   **with the GPU checkbox ON** (this machine has an RTX 5070 Ti, so both
+   paths get exercised: component install + `device=auto` picking CUDA), which
+   installs to `%LOCALAPPDATA%\VODCutter` (isolated from `D:\CutterDavinci`);
+   in a fresh terminal run `cutter new e2etest`, add a short real `.mp4` +
+   recap, `cutter run e2etest` — confirms the first-run model download into
+   `<install>\models\`, the pipeline, and GPU transcription; verify the
+   Resolve script was copied and `config.toml` written. The CPU path is
+   covered by the pre-package payload smoke test (no nvidia dirs staged there).
 3. **Uninstall test:** uninstall from Apps list; install dir and PATH entry
    gone.
 
