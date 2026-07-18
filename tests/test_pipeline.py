@@ -67,6 +67,11 @@ def test_run_stage_unknown_name(job):
         pipeline.run_stage(job, Config(), "florp")
 
 
+def test_run_stage_missing_prerequisite(job):
+    with pytest.raises(SystemExit, match="Missing matches.csv"):
+        pipeline.run_stage(job, Config(), "cut")
+
+
 def test_run_all_validates_before_work(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     root = tmp_path / "empty"

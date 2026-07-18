@@ -10,6 +10,27 @@ from .jobs import Job, validate_inputs
 STAGE_NAMES = ["beatify", "transcribe", "match", "motion", "ocr", "cut", "srt"]
 
 
+def _prerequisites(job: Job) -> dict[str, list[Path]]:
+    return {
+        "beatify": [],
+        "transcribe": [],
+        "match": [job.transcript, job.beats],
+        "motion": [],
+        "ocr": [job.matches, job.motion],
+        "cut": [job.matches, job.motion, job.ocr],
+        "srt": [job.matches],
+    }
+
+
+def check_prerequisites(job: Job, name: str) -> None:
+    for path in _prerequisites(job).get(name, []):
+        if not path.exists():
+            raise SystemExit(
+                f"Missing {path.name} (needed by '{name}'). "
+                f"Run 'cutter run <job>' or the earlier stages first."
+            )
+
+
 def stage_table(job: Job, cfg: Config) -> list[tuple[str, Path, Callable[[], None]]]:
     # Imports are lazy so `cutter --help` etc. never pay for av/onnxruntime.
     from . import beatify, match_onnx, motion, ocr_pass, snap, srt, transcribe
@@ -53,13 +74,15 @@ def run_all(job: Job, cfg: Config) -> None:
 
 
 def run_stage(job: Job, cfg: Config, name: str) -> None:
+    if name not in STAGE_NAMES:
+        raise SystemExit(f"Unknown stage: {name}. Stages: {', '.join(STAGE_NAMES)}")
     validate_inputs(job)
+    check_prerequisites(job, name)
     job.ensure_dirs()
     for n, output, fn in stage_table(job, cfg):
         if n == name:
             _run(n, output, fn, force=True)
             return
-    raise SystemExit(f"Unknown stage: {name}. Stages: {', '.join(STAGE_NAMES)}")
 
 
 def write_last_job(cuts_path: Path) -> None:
