@@ -70,13 +70,20 @@ All open-source, all local. Downloaded once, then cached.
 
 | Stage | Model | Size | Location |
 |---|---|---|---|
-| Transcribe | `Systran/faster-whisper-medium` | ~1.5 GB | `C:\Users\<you>\.cache\huggingface\hub\` |
-| Match | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX) | ~490 MB | `C:\Users\<you>\.cache\huggingface\hub\` |
+| Transcribe | `Systran/faster-whisper-medium` | ~1.5 GB | `D:\CutterDavinci\huggingface\hub\` |
+| Match | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (ONNX) | ~490 MB | `D:\CutterDavinci\huggingface\hub\` |
 | OCR | RapidOCR (PP-OCRv4 det/rec/cls) | ~16 MB | bundled in `.venv\Lib\site-packages\rapidocr_onnxruntime\models\` |
 
-The torch build `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
-(~480 MB) may also be in the HF cache from an earlier attempt; it's blocked by
-Windows Smart App Control and unused — safe to delete.
+The HF cache lives inside the repo folder instead of the default
+`C:\Users\<you>\.cache\huggingface\` because the user env var
+`HF_HOME=D:\CutterDavinci\huggingface` is set (and `huggingface/` is gitignored,
+so it's never committed). New terminals pick this up automatically; anything
+already open needs a restart to see it. To use the default `C:` location
+instead, just clear `HF_HOME`.
+
+(The torch build `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`,
+~480 MB, was left over from an earlier attempt — blocked by Windows Smart App
+Control and unused — and has been deleted.)
 
 None of these are in the git repo (they sit in the HF cache and the venv). A
 fresh clone re-downloads them on first run.

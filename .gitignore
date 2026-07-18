@@ -3,6 +3,9 @@
 __pycache__/
 *.pyc
 
+# Local Hugging Face model cache (HF_HOME points here; ~2 GB, re-downloadable)
+huggingface/
+
 # Large data / generated outputs live next to the VOD in E:\Videos\..., not here.
 # If you ever copy them in, keep these out of git:
 *.mp4
