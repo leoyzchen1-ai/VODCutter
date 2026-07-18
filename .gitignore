@@ -2,6 +2,10 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+
+# Subagent-driven-development scratch (briefs, reports, progress ledger)
+.superpowers/
 
 # Local Hugging Face model cache (HF_HOME points here; ~2 GB, re-downloadable)
 huggingface/
