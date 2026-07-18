@@ -24,10 +24,11 @@ import av
 import numpy as np
 
 # ----------------------------- config defaults -----------------------------
-VIDEO = r"E:\Videos\VersionRecaps\ZZZ3.1\Zenless Zone Zero Version 3.1 - The Long Goodbye Special Program.mp4"
-MATCHES = r"E:\Videos\VersionRecaps\ZZZ3.1\matches.csv"
-OUT = r"E:\Videos\VersionRecaps\ZZZ3.1\cuts_gameplay.csv"
-MOTION_CACHE = r"E:\Videos\VersionRecaps\ZZZ3.1\motion.csv"
+PROJECT = r"E:\Videos\VersionRecaps\ZZZ3.1"
+VIDEO = PROJECT + r"\source\Zenless Zone Zero Version 3.1 - The Long Goodbye Special Program.mp4"
+MATCHES = PROJECT + r"\work\matches.csv"
+OUT = PROJECT + r"\output\cuts_gameplay.csv"
+MOTION_CACHE = PROJECT + r"\work\motion.csv"
 
 SAMPLE_HZ = 4            # motion samples per second
 AW, AH = 160, 90         # downscaled analysis resolution (gray)

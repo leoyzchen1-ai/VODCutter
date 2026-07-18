@@ -24,10 +24,11 @@ import csv
 import re
 import numpy as np
 
-MATCHES = r"E:\Videos\VersionRecaps\ZZZ3.1\matches.csv"
-MOTION = r"E:\Videos\VersionRecaps\ZZZ3.1\motion.csv"
-OCR = r"E:\Videos\VersionRecaps\ZZZ3.1\ocr.csv"
-OUT = r"E:\Videos\VersionRecaps\ZZZ3.1\cuts_gameplay.csv"
+PROJECT = r"E:\Videos\VersionRecaps\ZZZ3.1"
+MATCHES = PROJECT + r"\work\matches.csv"
+MOTION = PROJECT + r"\work\motion.csv"
+OCR = PROJECT + r"\work\ocr.csv"
+OUT = PROJECT + r"\output\cuts_gameplay.csv"
 
 CLIP_LEN = 9.0
 MIN_CONF = 0.15

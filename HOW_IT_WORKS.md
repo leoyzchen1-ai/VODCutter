@@ -81,6 +81,25 @@ Windows Smart App Control and unused — safe to delete.
 None of these are in the git repo (they sit in the HF cache and the venv). A
 fresh clone re-downloads them on first run.
 
+## Project layout
+
+**Code** (`D:\CutterDavinci`, this repo) — active pipeline at the root,
+superseded scripts in `legacy/`:
+```
+transcribe.py  match_recap_onnx.py  ocr_pass.py  snap_gameplay.py  snap_visual.py  resolve_cut.lua
+legacy/   match_recap.py (TF-IDF)  match_recap_semantic.py (torch)  matches_to_srt.py
+          resolve_markers.py  run_markers.ps1
+```
+
+**Data** (`E:\Videos\VersionRecaps\ZZZ3.1`, not in git) — the scripts default to
+these subfolders (a `PROJECT` constant at the top of each):
+```
+source/       VOD .mp4, Version3.1Script.beats.txt (recap beats), notes
+transcripts/  transcript.json (native), transcript.en.json
+work/         matches.csv, motion.csv, ocr.csv   (caches/intermediates; _archive/ holds old experiments)
+output/       cuts_gameplay.csv, recap.srt        (deliverables)
+```
+
 ## Run it end to end
 
 ```powershell
@@ -88,12 +107,14 @@ fresh clone re-downloads them on first run.
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 
-# per VOD (run with the venv python via PowerShell, not Git Bash)
+# per VOD (run with the venv python via PowerShell, not Git Bash).
+# ocr_pass / snap_gameplay / snap_visual have the ZZZ3.1 paths baked in as defaults.
 $py = ".\.venv\Scripts\python.exe"
-& $py transcribe.py "VOD.mp4" -o transcript.json --model medium --device cuda
-& $py match_recap_onnx.py transcript.json recap.beats.txt -o matches.csv
-& $py ocr_pass.py            # writes ocr.csv (slow, cached)
-& $py snap_visual.py         # writes cuts_gameplay.csv (also builds motion.csv on first run)
+& $py transcribe.py "source\VOD.mp4" -o "transcripts\transcript.json" --model medium --device cuda
+& $py match_recap_onnx.py "transcripts\transcript.json" "source\Version3.1Script.beats.txt" -o "work\matches.csv"
+& $py snap_gameplay.py       # builds work\motion.csv (whole-VOD motion, cached)
+& $py ocr_pass.py            # builds work\ocr.csv (only beats that need text, cached)
+& $py snap_visual.py         # writes output\cuts_gameplay.csv (hybrid gameplay + OCR)
 # then: paste resolve_cut.lua into DaVinci Resolve's Lua console
 ```
 

@@ -14,7 +14,7 @@
 ]]
 
 -- ===================== CONFIG =====================
-local CSV          = "E:\\Videos\\VersionRecaps\\ZZZ3.1\\cuts_gameplay.csv"
+local CSV          = "E:\\Videos\\VersionRecaps\\ZZZ3.1\\output\\cuts_gameplay.csv"
 local PAD          = 1.0            -- seconds of padding added before start / after end
 local MIN_CONF     = 0.15           -- skip matches below this confidence
 local TIMELINE_NAME = "ZZZ3.1 Recap"

@@ -1,5 +1,10 @@
 # Recap-to-cuts pipeline
 
+> **See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for the current pipeline, folder
+> layout, and run steps.** This file is the original design note; it predates
+> the semantic/OCR matcher and the `source/ transcripts/ work/ output/` +
+> `legacy/` reorganization, so some paths and script names below are out of date.
+
 Goal: you have a raw livestream VOD and a prose recap script (no timecodes).
 This finds where each recap beat actually happens in the stream and marks it
 in Resolve so you can cut around it.

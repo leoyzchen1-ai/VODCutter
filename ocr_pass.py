@@ -1,71 +1,133 @@
 """
-OCR pass over the VOD: sample a frame every few seconds, read the on-screen
-text, and cache it to ocr.csv (columns: t, text). Torch-free (RapidOCR on
-onnxruntime), so it runs where Smart App Control blocks torch.
+Targeted OCR pass: read on-screen text only where it's needed.
 
-The on-screen text is what actually identifies a screen -- a banner splash
-literally reads "SIGNAL SEARCH / REMIELLE", an event card reads its title, etc.
-snap_visual.py matches recap beats against this text.
+Only the recap beats that DON'T contain sustained gameplay (banners, events,
+menus) need OCR -- those are the ones snap_visual.py routes to text matching.
+So instead of OCR-ing all 57 minutes, this decodes and OCRs only the windows
+around those beats (seeking straight to them), which is far faster.
 
-Run once (cached):
+Torch-free (RapidOCR on onnxruntime). Writes ocr.csv (t, text), cached.
+
     & "D:\\CutterDavinci\\.venv\\Scripts\\python.exe" D:\\CutterDavinci\\ocr_pass.py
+Options:
+    --full        OCR the whole video every --sample seconds (old behavior)
 """
 import argparse
 import csv
 import os
+import sys
 import av
 import numpy as np
 from PIL import Image
 from rapidocr_onnxruntime import RapidOCR
 
-VIDEO = r"E:\Videos\VersionRecaps\ZZZ3.1\Zenless Zone Zero Version 3.1 - The Long Goodbye Special Program.mp4"
-OUT = r"E:\Videos\VersionRecaps\ZZZ3.1\ocr.csv"
-SAMPLE_S = 3.0          # seconds between OCR'd frames (titles/banners linger)
-OCR_WIDTH = 1280        # downscale width for OCR (enough to read title text)
+PROJECT = r"E:\Videos\VersionRecaps\ZZZ3.1"
+VIDEO = PROJECT + r"\source\Zenless Zone Zero Version 3.1 - The Long Goodbye Special Program.mp4"
+MATCHES = PROJECT + r"\work\matches.csv"
+MOTION = PROJECT + r"\work\motion.csv"
+OUT = PROJECT + r"\work\ocr.csv"
+
+SAMPLE_S = 3.0
+OCR_WIDTH = 1100
 MIN_CONF = 0.5
+# a beat needs OCR when its window isn't mostly motion (same gate as snap_visual)
+MOVE_THRESH, MIN_MOVING_FRAC = 6.0, 0.55
+CLIP_BACK, CLIP_FWD = 2.0, 4.0        # motion window (matches snap_visual)
+OCR_BACK, OCR_FWD = 25.0, 80.0        # how far around a beat to read text
+
+
+def needed_windows(matches, motion, back, fwd):
+    """Union of [start-back, end+fwd] for beats without sustained gameplay."""
+    times, mags = None, None
+    try:
+        arr = np.loadtxt(motion, delimiter=",", skiprows=1)
+        times, mags = arr[:, 0], arr[:, 1]
+    except Exception:
+        pass
+    wins = []
+    with open(matches, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            try:
+                s, e = float(r["start"]), float(r["end"])
+            except (KeyError, ValueError):
+                continue
+            gameplay = False
+            if times is not None:
+                dur = min(9.0, (e - s) + CLIP_BACK + CLIP_FWD)
+                lo, hi = max(0.0, s - CLIP_BACK), max(s + dur, e + CLIP_FWD)
+                a = lo
+                while a + dur <= hi:
+                    m = mags[(times >= a) & (times < a + dur)]
+                    if len(m) and (m > MOVE_THRESH).mean() >= MIN_MOVING_FRAC:
+                        gameplay = True
+                        break
+                    a += 1.0
+            if not gameplay:
+                wins.append((max(0.0, s - back), e + fwd))
+    wins.sort()
+    merged = []
+    for a, b in wins:
+        if merged and a <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
 
 
 def main():
-    p = argparse.ArgumentParser(description="OCR the VOD every few seconds -> ocr.csv")
+    p = argparse.ArgumentParser()
     p.add_argument("--video", default=VIDEO)
+    p.add_argument("--matches", default=MATCHES)
+    p.add_argument("--motion", default=MOTION)
     p.add_argument("--out", default=OUT)
     p.add_argument("--sample", type=float, default=SAMPLE_S)
+    p.add_argument("--full", action="store_true", help="OCR the whole video, not just beat windows")
     args = p.parse_args()
 
-    if os.path.exists(args.out) and os.path.getmtime(args.out) >= os.path.getmtime(args.video):
-        print(f"OCR cache already current: {args.out}")
-        return
+    if args.full:
+        windows = [(0.0, 1e9)]
+    else:
+        windows = needed_windows(args.matches, args.motion, OCR_BACK, OCR_FWD)
+        total = sum(b - a for a, b in windows)
+        print(f"{len(windows)} windows to OCR, ~{total/60:.1f} min of video "
+              f"(vs 57 min full). ~{int(total/args.sample)} frames.", flush=True)
 
     ocr = RapidOCR()
     container = av.open(args.video)
     stream = container.streams.video[0]
     tb = stream.time_base
-    last_t = -1e9
-    rows = []
-    for frame in container.decode(stream):
-        t = float(frame.pts * tb) if frame.pts is not None else None
-        if t is None or t - last_t < args.sample:
-            continue
-        last_t = t
-        h = int(frame.height * OCR_WIDTH / frame.width)
-        img = frame.reformat(width=OCR_WIDTH, height=h, format="rgb24").to_ndarray()
-        res, _ = ocr(img)
-        texts = []
-        if res:
-            for _, txt, conf in res:
-                if conf >= MIN_CONF:
-                    texts.append(txt)
-        joined = " ".join(texts).replace("\n", " ")
-        rows.append((round(t, 1), joined))
-        if len(rows) % 25 == 0:
-            print(f"  {t:6.0f}s / 3424s  ({len(rows)} frames)  last: {joined[:60]}")
+    rows, done = [], 0
+    for a, b in windows:
+        if not args.full:
+            container.seek(int(a / tb), stream=stream, backward=True)
+        last_t = -1e9
+        for frame in container.decode(stream):
+            t = float(frame.pts * tb) if frame.pts is not None else None
+            if t is None:
+                continue
+            if t < a:
+                continue
+            if t > b:
+                break
+            if t - last_t < args.sample:
+                continue
+            last_t = t
+            h = int(frame.height * OCR_WIDTH / frame.width)
+            img = frame.reformat(width=OCR_WIDTH, height=h, format="rgb24").to_ndarray()
+            res, _ = ocr(img, use_cls=False)
+            texts = [txt for _, txt, conf in (res or []) if conf >= MIN_CONF]
+            rows.append((round(t, 1), " ".join(texts).replace("\n", " ")))
+            done += 1
+            if done % 10 == 0:
+                print(f"  {done} frames | {t:6.0f}s | {(' '.join(texts))[:55]}", flush=True)
     container.close()
 
+    rows.sort()
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["t", "text"])
         w.writerows(rows)
-    print(f"Wrote {args.out} ({len(rows)} frames OCR'd)")
+    print(f"Wrote {args.out} ({len(rows)} frames OCR'd)", flush=True)
 
 
 if __name__ == "__main__":

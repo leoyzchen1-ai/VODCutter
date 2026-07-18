@@ -6,7 +6,7 @@
 # Optional: pass a different CSV as the first argument.
 
 param(
-    [string]$Csv = "E:\Videos\VersionRecaps\ZZZ3.1\matches.csv"
+    [string]$Csv = "E:\Videos\VersionRecaps\ZZZ3.1\work\matches.csv"
 )
 
 $env:RESOLVE_SCRIPT_API = "C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting"
@@ -27,4 +27,4 @@ if (-not (Test-Path $Csv)) {
 }
 
 Write-Host "Adding markers from $Csv ..." -ForegroundColor Cyan
-& $vpy "D:\CutterDavinci\resolve_markers.py" $Csv
+& $vpy "D:\CutterDavinci\legacy\resolve_markers.py" $Csv
