@@ -1,0 +1,11 @@
+# Python virtual environment (recreate with pip install, don't version)
+.venv/
+__pycache__/
+*.pyc
+
+# Large data / generated outputs live next to the VOD in E:\Videos\..., not here.
+# If you ever copy them in, keep these out of git:
+*.mp4
+*.onnx
+motion.csv
+ocr.csv
