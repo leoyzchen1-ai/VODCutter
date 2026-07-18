@@ -20,6 +20,33 @@ local PAD          = 1.0            -- seconds of padding added before start / a
 local MIN_CONF     = 0.15           -- skip matches below this confidence
 -- =================================================
 
+-- ---- visible feedback ----
+-- Menu-launched scripts (Workspace > Scripts) print to the Console, which is
+-- usually closed -- a fatal error would look like a silent no-op. So fatal
+-- errors and the final result also pop a small dialog. pcall-guarded: if the
+-- UI toolkit isn't available (plain console paste), the print alone suffices.
+local function alert(msg)
+  print(msg)
+  pcall(function()
+    local f = fu or fusion
+    local ui = f.UIManager
+    local disp = bmd.UIDispatcher(ui)
+    local win = disp:AddWindow({
+      ID = "CutterAlert", WindowTitle = "Recap Cutter",
+      Geometry = { 400, 400, 560, 130 },
+      ui:VGroup{
+        ui:Label{ Text = msg, WordWrap = true },
+        ui:HGroup{ ui:HGap(0, 1), ui:Button{ ID = "OK", Text = "OK", Weight = 0 } },
+      },
+    })
+    function win.On.OK.Clicked(ev) disp:ExitLoop() end
+    function win.On.CutterAlert.Close(ev) disp:ExitLoop() end
+    win:Show()
+    disp:RunLoop()
+    win:Hide()
+  end)
+end
+
 -- ---- locate the cuts.csv written by `cutter run` ----
 local function readLastJob()
   local appdata = os.getenv("APPDATA")
@@ -46,12 +73,12 @@ end
 
 local CSV = readLastJob() or newestCutsInJobsRoot()
 if not CSV then
-  print("ERROR: no cuts.csv found. Run 'cutter run <job>' first.")
+  alert("ERROR: no cuts.csv found. Run 'cutter run <job>' first.")
   return
 end
 local probe = io.open(CSV, "r")
 if not probe then
-  print("ERROR: cuts file listed in last_job.txt is missing: " .. CSV)
+  alert("ERROR: cuts file listed in last_job.txt is missing: " .. CSV)
   return
 end
 probe:close()
@@ -65,10 +92,10 @@ print("Cutting from: " .. CSV .. "  ->  timeline '" .. TIMELINE_NAME .. "'")
 local app = resolve
 if not app and Resolve then app = Resolve() end
 if not app and bmd then app = bmd.scriptapp("Resolve") end
-if not app then print("ERROR: could not get the Resolve object."); return end
+if not app then alert("ERROR: could not get the Resolve object."); return end
 
 local project = app:GetProjectManager():GetCurrentProject()
-if not project then print("ERROR: no project open."); return end
+if not project then alert("ERROR: no project open."); return end
 local mediaPool = project:GetMediaPool()
 
 -- ---- find the VOD's media pool item ----
@@ -106,7 +133,7 @@ end
 
 local mpi = findFromTimeline() or findInFolder(mediaPool:GetRootFolder())
 if not mpi then
-  print("ERROR: couldn't find the VOD. Put it on a timeline or in the media pool.")
+  alert("ERROR: couldn't find the VOD. Put it on a timeline or in the media pool.")
   return
 end
 
@@ -147,7 +174,7 @@ end
 
 -- ---- read matches.csv: columns are recap_line, start, end, confidence, matched_transcript ----
 local fh = io.open(CSV, "r")
-if not fh then print("ERROR: cannot open " .. CSV); return end
+if not fh then alert("ERROR: cannot open " .. CSV); return end
 
 local clipInfos, kept, skipped, header = {}, 0, 0, true
 for line in fh:lines() do
@@ -175,7 +202,7 @@ for line in fh:lines() do
 end
 fh:close()
 
-if kept == 0 then print("Nothing to cut (0 segments after filtering)."); return end
+if kept == 0 then alert("Nothing to cut (0 segments after filtering)."); return end
 
 -- ---- create a fresh timeline and append the segments ----
 local name, tl, k = TIMELINE_NAME, nil, 2
@@ -185,12 +212,12 @@ while not tl and k < 50 do
   tl = mediaPool:CreateEmptyTimeline(name)
   k = k + 1
 end
-if not tl then print("ERROR: could not create a new timeline."); return end
+if not tl then alert("ERROR: could not create a new timeline."); return end
 
 local ok = mediaPool:AppendToTimeline(clipInfos)
-if not ok then print("ERROR: AppendToTimeline failed."); return end
+if not ok then alert("ERROR: AppendToTimeline failed."); return end
 
 local totalSec = 0
 for _, ci in ipairs(clipInfos) do totalSec = totalSec + (ci.endFrame - ci.startFrame) / fps end
-print(string.format("Done. Timeline '%s': %d segments, ~%.1f min. (%d skipped below conf %.2f)",
+alert(string.format("Done. Timeline '%s': %d segments, ~%.1f min. (%d skipped below conf %.2f)",
       name, kept, totalSec / 60, skipped, MIN_CONF))
