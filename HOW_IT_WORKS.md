@@ -19,53 +19,61 @@ a few thresholds.
 Each script writes a file the next one reads:
 
 ```
-recap.txt ─▶ cutter/snap.py (beatify) ─▶ beats.txt ┐
-                                                      │
-VOD.mp4 ─▶ cutter/transcribe.py ──────────▶ transcript.json  (what was said, timestamped)
-                                           │
-beats.txt ───────────────────────────────┤
-transcript.json ──────────────────────────┴▶ cutter/match_onnx.py ─▶ matches.csv  (which moment each beat is about)
-VOD.mp4 ─▶ cutter/ocr_pass.py ────────────▶ ocr.csv           (on-screen text every 3s)
-VOD.mp4 ─▶ cutter/motion.py ──────────────▶ motion.csv        (how much the picture moves)
-matches + motion + ocr ─▶ cutter/snap.py ─▶ cuts.csv (exact start/end per beat)
-cuts.csv ─▶ resolve_cut.lua ─▶ "Recap" timeline in DaVinci
+recap.txt ─▶ cutter/beatify.py       ─▶ beats.txt        ┐
+                                                          │
+VOD.mp4   ─▶ cutter/transcribe.py    ─▶ transcript.json  │ (what was said, timestamped)
+                                                          │
+beats.txt + transcript.json ─────────▶ cutter/match_onnx.py ─▶ matches.csv  (which moment each beat is about)
+VOD.mp4   ─▶ cutter/ocr_pass.py      ─▶ ocr.csv          (on-screen text every 3s)
+VOD.mp4   ─▶ cutter/motion.py        ─▶ motion.csv       (how much the picture moves)
+matches + motion + ocr ──────────────▶ cutter/snap.py    ─▶ cuts.csv (exact start/end per beat)
+cuts.csv  ─▶ resolve_cut.lua         ─▶ "<job> Recap" timeline in DaVinci
 ```
 
-### 1. `transcribe.py` — speech to text
+### 0. `cutter/beatify.py` — prose to beats
+Splits the prose `recap.txt` into individual sentences ("beats") using
+`pysbd`, one beat per script line, written to `work\beats.txt`. This file is
+editable: tweak a split, merge two beats, delete `work\matches.csv` and
+everything downstream, and re-run to pick up the edit.
+
+### 1. `cutter/transcribe.py` — speech to text
 Runs Whisper (via `faster-whisper`) on the audio to produce timestamped text.
 Use the native language of the stream (here: Chinese) for accuracy.
 Output: `transcript.json`.
 
-### 2. `match_recap_onnx.py` — when is each script line talked about?
-Embeds every recap sentence and every chunk of the transcript into vectors with
-a **multilingual** model, then picks the transcript chunk closest in meaning to
-each recap line. Multilingual is the trick: an **English** script matches a
+### 2. `cutter/match_onnx.py` — when is each script line talked about?
+Embeds every beat and every chunk of the transcript into vectors with a
+**multilingual** model, then picks the transcript chunk closest in meaning to
+each beat. Multilingual is the trick: an **English** script matches a
 **Chinese** transcript by *meaning*, not shared words.
 Output: `matches.csv` (each beat → a timestamp region).
-(TF-IDF word-overlap variants — `match_recap.py`, `match_recap_semantic.py` —
-are kept for reference; the ONNX one is torch-free and what we use.)
 
 ### 3. Reading the picture, not just the audio
 The transcript only tells you when something is *spoken* — often the hosts on
 the couch, not the gameplay they're describing. Two signals read the pixels:
 
-- **`snap_gameplay.py` → `motion.csv`**: how much the frame changes every
+- **`cutter/motion.py` → `motion.csv`**: how much the frame changes every
   ¼ second. Gameplay moves a lot; a couch shot is nearly still. Finds the
   *gameplay* portion inside a beat's window.
-- **`ocr_pass.py` → `ocr.csv`**: reads the **on-screen text** every 3s with
-  RapidOCR. A banner literally says `SIGNAL SEARCH / REMIELLE`, so banner/event
-  beats can jump to the exact frame whose text matches the beat.
+- **`cutter/ocr_pass.py` → `ocr.csv`**: reads the **on-screen text** every 3s
+  with RapidOCR. A banner literally says `SIGNAL SEARCH / REMIELLE`, so
+  banner/event beats can jump to the exact frame whose text matches the beat.
 
-### 4. `snap_visual.py` — the hybrid decision
+### 4. `cutter/snap.py` — the hybrid decision
 For each beat: strong motion in its window → use that **gameplay** span;
 otherwise a frame whose **OCR text** matches the beat's names → use that (the
 banner/event screen); otherwise fall back to the least-static moment.
-Output: `cuts_gameplay.csv` (precise start/end per beat, in script order).
+Output: `cuts.csv` (precise start/end per beat, in script order).
 
 ### 5. `resolve_cut.lua` — assembly
-Paste into DaVinci Resolve's Lua console (Workspace ▸ Console ▸ Lua). It reads
-`cuts_gameplay.csv` and, via Resolve's scripting API, creates a new timeline and
-appends each `[start → end]` segment of the VOD back to back. No manual cutting.
+Installed once by `install_resolve_script.ps1` into DaVinci Resolve's script
+menu; run it from **Workspace ▸ Scripts ▸ resolve_cut** (console-pasting into
+Workspace ▸ Console ▸ Lua still works if you prefer). It auto-finds the job:
+it reads `last_job.txt` (written by the most recent `cutter run`), falling
+back to the newest `cuts.csv` under `Documents\CutterJobs\` if that's missing.
+Via Resolve's scripting API it then creates a new **"`<job>` Recap"** timeline
+and appends each `[start → end]` segment of the VOD back to back. No manual
+cutting, no console pasting required.
 
 ## Models and where they live
 
@@ -93,10 +101,13 @@ fresh clone re-downloads them on first run.
 
 ## Project layout
 
-**Code** (`D:\CutterDavinci`, this repo) — active pipeline at the root,
-superseded scripts in `legacy/`:
+**Code** (`D:\CutterDavinci`, this repo) — active pipeline in the `cutter/`
+package, superseded scripts in `legacy/`:
 ```
-transcribe.py  match_recap_onnx.py  ocr_pass.py  snap_gameplay.py  snap_visual.py  resolve_cut.lua
+cutter/   beatify.py  transcribe.py  match_onnx.py  motion.py  ocr_pass.py
+          snap.py  srt.py  pipeline.py  cli.py  config.py  jobs.py  device.py
+resolve_cut.lua
+install_resolve_script.ps1
 legacy/   match_recap.py (TF-IDF)  match_recap_semantic.py (torch)  matches_to_srt.py
           resolve_markers.py  run_markers.ps1
 ```
@@ -140,5 +151,6 @@ No GPU? `device = "auto"` (the default) falls back to CPU automatically.
 - Run the video/ML scripts with the **venv python via PowerShell**. Git Bash
   trips Windows Smart App Control on some native DLLs (torch, PyAV).
 - `motion.csv` and `ocr.csv` are caches — delete them to force a rebuild.
-- Matching is approximate. Review the cuts and tune `snap_visual.py` /
-  `snap_gameplay.py` thresholds if a beat lands wrong.
+- Matching is approximate. Review the cuts and tune the knobs in `cutter.toml`
+  (`min_conf`, `move_thresh`, `min_moving_frac`, `clip_len`) — or the
+  constants in `cutter/snap.py` directly — if a beat lands wrong.
