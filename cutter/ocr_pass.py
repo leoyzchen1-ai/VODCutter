@@ -8,7 +8,7 @@ around those beats (seeking straight to them), which is far faster.
 
 Torch-free (RapidOCR on onnxruntime). Writes ocr.csv (t, text), cached.
 
-    & "D:\\CutterDavinci\\.venv\\Scripts\\python.exe" D:\\CutterDavinci\\ocr_pass.py
+    python -m cutter.ocr_pass --video ... --matches ... --motion ... --out ...
 Options:
     --full        OCR the whole video every --sample seconds (old behavior)
 """
@@ -20,12 +20,6 @@ import av
 import numpy as np
 from PIL import Image
 from rapidocr_onnxruntime import RapidOCR
-
-PROJECT = r"E:\Videos\VersionRecaps\ZZZ3.1"
-VIDEO = PROJECT + r"\source\Zenless Zone Zero Version 3.1 - The Long Goodbye Special Program.mp4"
-MATCHES = PROJECT + r"\work\matches.csv"
-MOTION = PROJECT + r"\work\motion.csv"
-OUT = PROJECT + r"\work\ocr.csv"
 
 SAMPLE_S = 3.0
 OCR_WIDTH = 1100
@@ -74,31 +68,23 @@ def needed_windows(matches, motion, back, fwd):
     return merged
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--video", default=VIDEO)
-    p.add_argument("--matches", default=MATCHES)
-    p.add_argument("--motion", default=MOTION)
-    p.add_argument("--out", default=OUT)
-    p.add_argument("--sample", type=float, default=SAMPLE_S)
-    p.add_argument("--full", action="store_true", help="OCR the whole video, not just beat windows")
-    args = p.parse_args()
-
-    if args.full:
+def run_ocr(video, matches, motion, out, sample=SAMPLE_S, full=False):
+    """Pipeline stage: OCR on-screen text in the windows that need it."""
+    if full:
         windows = [(0.0, 1e9)]
     else:
-        windows = needed_windows(args.matches, args.motion, OCR_BACK, OCR_FWD)
+        windows = needed_windows(matches, motion, OCR_BACK, OCR_FWD)
         total = sum(b - a for a, b in windows)
-        print(f"{len(windows)} windows to OCR, ~{total/60:.1f} min of video "
-              f"(vs 57 min full). ~{int(total/args.sample)} frames.", flush=True)
+        print(f"{len(windows)} windows to OCR, ~{total/60:.1f} min of video. "
+              f"~{int(total/sample)} frames.", flush=True)
 
     ocr = RapidOCR()
-    container = av.open(args.video)
+    container = av.open(str(video))
     stream = container.streams.video[0]
     tb = stream.time_base
     rows, done = [], 0
     for a, b in windows:
-        if not args.full:
+        if not full:
             container.seek(int(a / tb), stream=stream, backward=True)
         last_t = -1e9
         for frame in container.decode(stream):
@@ -109,7 +95,7 @@ def main():
                 continue
             if t > b:
                 break
-            if t - last_t < args.sample:
+            if t - last_t < sample:
                 continue
             last_t = t
             h = int(frame.height * OCR_WIDTH / frame.width)
@@ -123,11 +109,23 @@ def main():
     container.close()
 
     rows.sort()
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
+    with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["t", "text"])
         w.writerows(rows)
-    print(f"Wrote {args.out} ({len(rows)} frames OCR'd)", flush=True)
+    print(f"Wrote {out} ({len(rows)} frames OCR'd)", flush=True)
+
+
+def main():
+    p = argparse.ArgumentParser(description="Targeted on-screen-text OCR pass")
+    p.add_argument("--video", required=True)
+    p.add_argument("--matches", required=True)
+    p.add_argument("--motion", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--sample", type=float, default=SAMPLE_S)
+    p.add_argument("--full", action="store_true", help="OCR the whole video, not just beat windows")
+    args = p.parse_args()
+    run_ocr(args.video, args.matches, args.motion, args.out, args.sample, args.full)
 
 
 if __name__ == "__main__":
