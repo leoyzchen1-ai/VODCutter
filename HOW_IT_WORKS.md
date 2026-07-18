@@ -19,13 +19,16 @@ a few thresholds.
 Each script writes a file the next one reads:
 
 ```
-VOD.mp4 ─▶ transcribe.py ─────────▶ transcript.json      (what was said, timestamped)
-recap.beats.txt ┐
-transcript.json ┴▶ match_recap_onnx.py ─▶ matches.csv     (which moment each script line is about)
-VOD.mp4 ─▶ ocr_pass.py ───────────▶ ocr.csv               (on-screen text every 3s)
-VOD.mp4 ─▶ snap_gameplay.py ──────▶ motion.csv            (how much the picture moves)
-matches + motion + ocr ─▶ snap_visual.py ─▶ cuts_gameplay.csv  (exact start/end per beat)
-cuts_gameplay.csv ─▶ resolve_cut.lua ─▶ "Recap" timeline in DaVinci
+recap.txt ─▶ cutter/snap.py (beatify) ─▶ beats.txt ┐
+                                                      │
+VOD.mp4 ─▶ cutter/transcribe.py ──────────▶ transcript.json  (what was said, timestamped)
+                                           │
+beats.txt ───────────────────────────────┤
+transcript.json ──────────────────────────┴▶ cutter/match_onnx.py ─▶ matches.csv  (which moment each beat is about)
+VOD.mp4 ─▶ cutter/ocr_pass.py ────────────▶ ocr.csv           (on-screen text every 3s)
+VOD.mp4 ─▶ cutter/motion.py ──────────────▶ motion.csv        (how much the picture moves)
+matches + motion + ocr ─▶ cutter/snap.py ─▶ cuts.csv (exact start/end per beat)
+cuts.csv ─▶ resolve_cut.lua ─▶ "Recap" timeline in DaVinci
 ```
 
 ### 1. `transcribe.py` — speech to text
@@ -98,32 +101,40 @@ legacy/   match_recap.py (TF-IDF)  match_recap_semantic.py (torch)  matches_to_s
           resolve_markers.py  run_markers.ps1
 ```
 
-**Data** (`E:\Videos\VersionRecaps\ZZZ3.1`, not in git) — the scripts default to
-these subfolders (a `PROJECT` constant at the top of each):
+**Data** — one folder per VOD under the jobs root (`Documents\CutterJobs\`,
+override with `jobs_root` in `%APPDATA%\cutter\config.toml`):
 ```
-source/       VOD .mp4, Version3.1Script.beats.txt (recap beats), notes
-transcripts/  transcript.json (native), transcript.en.json
-work/         matches.csv, motion.csv, ocr.csv   (caches/intermediates; _archive/ holds old experiments)
-output/       cuts_gameplay.csv, recap.srt        (deliverables)
+Documents\CutterJobs\myjob\
+  vod.mp4          your stream (first .mp4 in the folder is used)
+  recap.txt        your recap: ONE prose paragraph, no timestamps, no beats
+  cutter.toml      optional per-job knobs (model, device, min_conf, ...)
+  work\            caches: beats.txt, transcript.json, matches.csv, motion.csv, ocr.csv
+  out\             deliverables: cuts.csv, recap.srt
 ```
+The old `E:\Videos\VersionRecaps\ZZZ3.1` layout predates the CLI and stays as-is
+for reference.
 
 ## Run it end to end
 
 ```powershell
 # one-time
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install -r requirements.txt -e .
+powershell -File install_resolve_script.ps1     # adds Workspace > Scripts > resolve_cut
 
-# per VOD (run with the venv python via PowerShell, not Git Bash).
-# ocr_pass / snap_gameplay / snap_visual have the ZZZ3.1 paths baked in as defaults.
-$py = ".\.venv\Scripts\python.exe"
-& $py transcribe.py "source\VOD.mp4" -o "transcripts\transcript.json" --model medium --device cuda
-& $py match_recap_onnx.py "transcripts\transcript.json" "source\Version3.1Script.beats.txt" -o "work\matches.csv"
-& $py snap_gameplay.py       # builds work\motion.csv (whole-VOD motion, cached)
-& $py ocr_pass.py            # builds work\ocr.csv (only beats that need text, cached)
-& $py snap_visual.py         # writes output\cuts_gameplay.csv (hybrid gameplay + OCR)
-# then: paste resolve_cut.lua into DaVinci Resolve's Lua console
+# per VOD
+.venv\Scripts\cutter new myjob                  # scaffolds Documents\CutterJobs\myjob
+#   -> copy your VOD .mp4 in, write recap.txt as one prose paragraph
+.venv\Scripts\cutter run myjob                  # beatify -> transcribe -> match -> motion -> ocr -> cut -> srt
+# then in DaVinci Resolve: import the VOD onto a timeline,
+# Workspace > Scripts > resolve_cut  ->  a "myjob Recap" timeline appears
 ```
+
+Stages skip when their output exists — delete a file in `work\` to rebuild it.
+`work\beats.txt` is editable: tweak the beat split, delete `work\matches.csv`
+and everything after it, and re-run. Force one stage with
+`cutter <stage> myjob` (stages: beatify transcribe match motion ocr cut srt).
+No GPU? `device = "auto"` (the default) falls back to CPU automatically.
 
 ## Gotchas
 - Run the video/ML scripts with the **venv python via PowerShell**. Git Bash

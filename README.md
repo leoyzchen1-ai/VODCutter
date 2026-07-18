@@ -5,6 +5,10 @@
 > the semantic/OCR matcher and the `source/ transcripts/ work/ output/` +
 > `legacy/` reorganization, so some paths and script names below are out of date.
 
+> **Update (Jul 2026):** the pipeline is now a reusable CLI — `cutter new <job>`,
+> `cutter run <job>` — over per-VOD job folders in `Documents\CutterJobs\`.
+> See HOW_IT_WORKS.md. The per-script commands below still work but are superseded.
+
 Goal: you have a raw livestream VOD and a prose recap script (no timecodes).
 This finds where each recap beat actually happens in the stream and marks it
 in Resolve so you can cut around it.
