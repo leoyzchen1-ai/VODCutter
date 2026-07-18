@@ -13,22 +13,16 @@ For each recap beat (from the semantic matches.csv), decide the cut like this:
 
 Inputs (all cached, torch-free):
     matches.csv   semantic beat -> transcript region + timestamps
-    motion.csv    per-sample motion (from snap_gameplay.py / its cache)
+    motion.csv    per-sample motion (from cutter/motion.py / its cache)
     ocr.csv       per-timestamp on-screen text (from ocr_pass.py)
 
 Run:
-    & "D:\\CutterDavinci\\.venv\\Scripts\\python.exe" D:\\CutterDavinci\\snap_visual.py
+    python -m cutter.snap --matches ... --motion ... --ocr ... --out ...
 """
 import argparse
 import csv
 import re
 import numpy as np
-
-PROJECT = r"E:\Videos\VersionRecaps\ZZZ3.1"
-MATCHES = PROJECT + r"\work\matches.csv"
-MOTION = PROJECT + r"\work\motion.csv"
-OCR = PROJECT + r"\work\ocr.csv"
-OUT = PROJECT + r"\output\cuts_gameplay.csv"
 
 CLIP_LEN = 9.0
 MIN_CONF = 0.15
@@ -113,33 +107,27 @@ def best_ocr(ocr_rows, ws, we, ents, kws, back, fwd):
     return t, ent_hits, kw_hits, raw
 
 
-def main():
-    p = argparse.ArgumentParser(description="Hybrid gameplay+OCR visual matcher")
-    p.add_argument("--matches", default=MATCHES)
-    p.add_argument("--motion", default=MOTION)
-    p.add_argument("--ocr", default=OCR)
-    p.add_argument("--out", default=OUT)
-    p.add_argument("--min-conf", type=float, default=MIN_CONF)
-    args = p.parse_args()
-
-    times, mags = load_motion(args.motion)
-    ocr_rows = load_ocr(args.ocr)
-    with open(args.matches, newline="", encoding="utf-8") as f:
+def run_snap(matches, motion, ocr, out, min_conf=MIN_CONF, clip_len=CLIP_LEN,
+             move_thresh=MOVE_THRESH, min_moving_frac=MIN_MOVING_FRAC):
+    """Pipeline stage: pick the exact cut span per beat (gameplay > OCR > weak)."""
+    times, mags = load_motion(motion)
+    ocr_rows = load_ocr(ocr)
+    with open(matches, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    out, n_game, n_ocr, n_weak = [], 0, 0, 0
+    out_rows, n_game, n_ocr, n_weak = [], 0, 0, 0
     for r in rows:
         try:
             conf, s, e = float(r["confidence"]), float(r["start"]), float(r["end"])
         except (KeyError, ValueError):
             continue
-        if conf < args.min_conf:
+        if conf < min_conf:
             continue
-        dur = min(CLIP_LEN, (e - s) + BACK + FWD)
+        dur = min(clip_len, (e - s) + BACK + FWD)
         ents, kws = beat_terms(r["recap_line"])
 
-        gm = best_window(times, mags, s, e, dur, BACK, FWD, MOVE_THRESH)
-        if gm and gm[1] >= MIN_MOVING_FRAC:
+        gm = best_window(times, mags, s, e, dur, BACK, FWD, move_thresh)
+        if gm and gm[1] >= min_moving_frac:
             ws = gm[0]
             tier = f"gameplay frac={gm[1]:.2f}"
             n_game += 1
@@ -154,17 +142,28 @@ def main():
                 tier = f"weak frac={gm[1]:.2f}" if gm else "weak"
                 n_weak += 1
 
-        out.append({
+        out_rows.append({
             "recap_line": r["recap_line"], "start": f"{ws:.1f}", "end": f"{ws + dur:.1f}",
             "confidence": r["confidence"], "matched_transcript": tier,
         })
         print(f"[{tier[:60]:<60}] {r['recap_line'][:40]}")
 
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
+    with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["recap_line", "start", "end", "confidence", "matched_transcript"])
         w.writeheader()
-        w.writerows(out)
-    print(f"\n{n_game} gameplay, {n_ocr} OCR-matched, {n_weak} weak. Wrote {args.out} ({len(out)} cuts).")
+        w.writerows(out_rows)
+    print(f"\n{n_game} gameplay, {n_ocr} OCR-matched, {n_weak} weak. Wrote {out} ({len(out_rows)} cuts).")
+
+
+def main():
+    p = argparse.ArgumentParser(description="Hybrid gameplay+OCR visual matcher")
+    p.add_argument("--matches", required=True)
+    p.add_argument("--motion", required=True)
+    p.add_argument("--ocr", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--min-conf", type=float, default=MIN_CONF)
+    args = p.parse_args()
+    run_snap(args.matches, args.motion, args.ocr, args.out, args.min_conf)
 
 
 if __name__ == "__main__":
