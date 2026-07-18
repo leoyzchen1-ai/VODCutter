@@ -34,6 +34,7 @@ end
 
 local function newestCutsInJobsRoot()
   -- fallback: newest cuts.csv anywhere under Documents\CutterJobs
+  -- NOTE: assumes the default jobs root (a custom jobs_root config still works via last_job.txt above).
   local cmd = [[powershell -NoProfile -Command "Get-ChildItem (Join-Path $env:USERPROFILE 'Documents\CutterJobs') -Recurse -Filter cuts.csv -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName"]]
   local h = io.popen(cmd)
   if not h then return nil end

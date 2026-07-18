@@ -14,11 +14,8 @@ Options:
 """
 import argparse
 import csv
-import os
-import sys
 import av
 import numpy as np
-from PIL import Image
 from rapidocr_onnxruntime import RapidOCR
 
 SAMPLE_S = 3.0

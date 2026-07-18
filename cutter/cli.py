@@ -26,7 +26,7 @@ def cmd_new(root: Path, name: str) -> None:
     d.mkdir(parents=True)
     (d / "recap.txt").write_text(RECAP_TEMPLATE, encoding="utf-8")
     print(f"Created {d}")
-    print(f"Next: copy your VOD (.mp4) into that folder, rewrite recap.txt, then run:")
+    print("Next: copy your VOD (.mp4) into that folder, rewrite recap.txt, then run:")
     print(f"    cutter run {name}")
 
 

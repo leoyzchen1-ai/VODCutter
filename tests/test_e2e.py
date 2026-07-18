@@ -35,6 +35,7 @@ def make_video(path, dur=20, fps=8, w=160, h=90):
 def test_full_pipeline_on_synthetic_job(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))     # no Resolve -> warn only
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    # without HF_HOME set, the ONNX model downloads (~490MB) into the tmp cache each run -- set HF_HOME to avoid
     job = tmp_path / "Documents" / "CutterJobs" / "e2e"
     (job / "work").mkdir(parents=True)
 
