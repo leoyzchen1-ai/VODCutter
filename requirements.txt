@@ -1,0 +1,30 @@
+# Recap-to-cuts pipeline dependencies.
+#
+# Rebuild the venv:
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt
+#
+# Note: run the video/ML scripts with the venv python via PowerShell, not Git
+# Bash -- Bash trips Windows Smart App Control on some native DLLs.
+
+# --- transcription (transcribe.py) ---
+faster-whisper==1.2.1
+
+# --- recap <-> transcript matching ---
+scikit-learn==1.9.0          # TF-IDF matcher (match_recap.py)
+huggingface-hub==1.24.0      # model download for the ONNX semantic matcher
+tokenizers==0.22.2           # tokenizer for match_recap_onnx.py
+
+# --- video frames / motion / OCR ---
+av==18.0.0                   # decode frames (motion + OCR passes)
+numpy==2.5.1
+pillow==12.3.0               # save/inspect frames
+onnxruntime==1.27.0          # runs the ONNX semantic model AND the OCR models (torch-free)
+rapidocr-onnxruntime==1.4.4  # on-screen text OCR (ocr_pass.py / snap_visual.py)
+
+# --- optional: torch-based semantic matcher (match_recap_semantic.py) ---
+# Not required: match_recap_onnx.py produces the same result without torch, and
+# torch's DLLs are blocked by Windows Smart App Control on this machine.
+# Uncomment only where torch actually loads:
+# sentence-transformers==5.6.0
+# torch==2.13.0
