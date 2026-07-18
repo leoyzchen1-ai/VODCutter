@@ -30,6 +30,16 @@ def test_run_transcribe_writes_json(monkeypatch, tmp_path):
     assert data == [{"start": 0.0, "end": 2.5, "text": "hello"}]
 
 
+def test_run_transcribe_warns_on_cpu(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(tr, "transcribe", lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hi"}])
+    monkeypatch.setattr(tr, "pick_device", lambda req: ("cpu", "int8"))
+
+    out = tmp_path / "transcript.json"
+    tr.run_transcribe(tmp_path / "v.mp4", out, model="tiny")
+
+    assert "CPU" in capsys.readouterr().out
+
+
 def test_run_transcribe_forwards_task_argument(monkeypatch, tmp_path):
     """Verify that task argument is forwarded through to transcribe()."""
     tasks_seen = []
