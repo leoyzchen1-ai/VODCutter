@@ -6,19 +6,59 @@
     2. Workspace > Console, switch the dropdown from Py3 to Lua.
     3. Paste this whole file, press Enter.
 
-  It reads matches.csv, then creates a NEW timeline "ZZZ3.1 Recap" containing
-  only the matched recap segments, in recap-script (CSV row) order, padded ~1s
-  on each side. Your original timeline/VOD is untouched.
+  It reads the cuts.csv of the last `cutter run` (via last_job.txt), or the
+  newest job under Documents\CutterJobs; timeline is named `<job> Recap`.
+  It then creates a NEW timeline containing only the matched recap segments,
+  in recap-script (CSV row) order, padded ~1s on each side. Your original
+  timeline/VOD is untouched.
 
   Edit the CONFIG block below if your paths/preferences differ.
 ]]
 
 -- ===================== CONFIG =====================
-local CSV          = "E:\\Videos\\VersionRecaps\\ZZZ3.1\\output\\cuts_gameplay.csv"
 local PAD          = 1.0            -- seconds of padding added before start / after end
 local MIN_CONF     = 0.15           -- skip matches below this confidence
-local TIMELINE_NAME = "ZZZ3.1 Recap"
 -- =================================================
+
+-- ---- locate the cuts.csv written by `cutter run` ----
+local function readLastJob()
+  local appdata = os.getenv("APPDATA")
+  if not appdata then return nil end
+  local f = io.open(appdata .. "\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility\\last_job.txt", "r")
+  if not f then return nil end
+  local p = f:read("*l")
+  f:close()
+  if p and #p > 0 then return p end
+  return nil
+end
+
+local function newestCutsInJobsRoot()
+  -- fallback: newest cuts.csv anywhere under Documents\CutterJobs
+  local cmd = [[powershell -NoProfile -Command "Get-ChildItem (Join-Path $env:USERPROFILE 'Documents\CutterJobs') -Recurse -Filter cuts.csv -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName"]]
+  local h = io.popen(cmd)
+  if not h then return nil end
+  local out = h:read("*l")
+  h:close()
+  if out and #out > 0 then return out end
+  return nil
+end
+
+local CSV = readLastJob() or newestCutsInJobsRoot()
+if not CSV then
+  print("ERROR: no cuts.csv found. Run 'cutter run <job>' first.")
+  return
+end
+local probe = io.open(CSV, "r")
+if not probe then
+  print("ERROR: cuts file listed in last_job.txt is missing: " .. CSV)
+  return
+end
+probe:close()
+
+-- timeline named after the job folder: ...\myjob\out\cuts.csv -> "myjob Recap"
+local jobName = CSV:match("([^\\]+)\\out\\cuts%.csv$") or "Cutter"
+local TIMELINE_NAME = jobName .. " Recap"
+print("Cutting from: " .. CSV .. "  ->  timeline '" .. TIMELINE_NAME .. "'")
 
 -- ---- get the Resolve app object (console usually predefines `resolve`) ----
 local app = resolve
