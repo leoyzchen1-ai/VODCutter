@@ -29,16 +29,16 @@ def transcribe(video_path, model_size="medium", device="cuda", compute_type="flo
     return result
 
 
-def run_transcribe(video: Path, out_json: Path, model: str, device: str = "auto") -> None:
+def run_transcribe(video: Path, out_json: Path, model: str, device: str = "auto", task: str = "transcribe") -> None:
     """Pipeline stage: transcribe with auto device + runtime CPU fallback."""
     dev, ctype = pick_device(device)
     try:
-        segments = transcribe(str(video), model, dev, ctype)
+        segments = transcribe(str(video), model, dev, ctype, task)
     except Exception as e:
         if dev != "cuda":
             raise
         print(f"[!] CUDA transcription failed ({e}); retrying on CPU/int8")
-        segments = transcribe(str(video), model, "cpu", "int8")
+        segments = transcribe(str(video), model, "cpu", "int8", task)
     out_json.parent.mkdir(parents=True, exist_ok=True)
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(segments, f, indent=2, ensure_ascii=False)
@@ -53,7 +53,7 @@ def main():
     parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"], help="Inference device")
     parser.add_argument("--task", default="transcribe", choices=["transcribe", "translate"])
     args = parser.parse_args()
-    run_transcribe(Path(args.video), Path(args.output), args.model, args.device)
+    run_transcribe(Path(args.video), Path(args.output), args.model, args.device, args.task)
 
 
 if __name__ == "__main__":
