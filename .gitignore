@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 *.egg-info/
+build/
 
 # Subagent-driven-development scratch (briefs, reports, progress ledger)
 .superpowers/
