@@ -8,6 +8,8 @@
 > **Update (Jul 2026):** the pipeline is now a reusable CLI — `cutter new <job>`,
 > `cutter run <job>` — over per-VOD job folders in `Documents\CutterJobs\`.
 > See HOW_IT_WORKS.md. The per-script commands below still work but are superseded.
+> Customers get `installer\Output\VODCutterSetup-<version>.exe` (built by
+> `installer\build.ps1`) — see "Shipping it: the installer" in HOW_IT_WORKS.md.
 
 Goal: you have a raw livestream VOD and a prose recap script (no timecodes).
 This finds where each recap beat actually happens in the stream and marks it

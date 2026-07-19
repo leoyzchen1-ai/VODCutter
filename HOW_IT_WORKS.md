@@ -147,6 +147,32 @@ and everything after it, and re-run. Force one stage with
 `cutter <stage> myjob` (stages: beatify transcribe match motion ocr cut srt).
 No GPU? `device = "auto"` (the default) falls back to CPU automatically.
 
+## Shipping it: the installer
+
+`installer\build.ps1` builds `VODCutterSetup-<version>.exe` — a per-user Inno
+Setup wizard for customers (no admin, no Python required):
+
+```powershell
+# build machine one-time: Inno Setup 6 (winget install -e --id JRSoftware.InnoSetup,
+# or the official innosetup exe with /CURRENTUSER)
+powershell -ExecutionPolicy Bypass -File installer\build.ps1
+# -> installer\Output\VODCutterSetup-<version>.exe
+```
+
+What installing does: puts an embeddable Python + the pipeline in
+`%LOCALAPPDATA%\VODCutter`, adds `cutter` to the user PATH, installs the
+Resolve menu script, and writes a default `%APPDATA%\cutter\config.toml`
+(`model = "small"` for tolerable CPU transcription). An optional
+"GPU acceleration (NVIDIA)" checkbox lays cuDNN/cuBLAS into the bundled
+runtime — with it, `device = "auto"` uses the GPU automatically. Models are
+not shipped; the first `cutter run` downloads them (~1 GB) into
+`%LOCALAPPDATA%\VODCutter\models`. Uninstalling (Windows Apps list) removes
+the install dir, downloaded models, and the PATH entry.
+
+Customer flow after install: open a new terminal → `cutter new myjob` →
+drop in the VOD + write `recap.txt` → `cutter run myjob` → one click in
+Resolve. The installer shows these steps on its final page.
+
 ## Gotchas
 - Run the video/ML scripts with the **venv python via PowerShell**. Git Bash
   trips Windows Smart App Control on some native DLLs (torch, PyAV).
