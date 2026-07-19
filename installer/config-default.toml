@@ -1,0 +1,3 @@
+# VODCutter defaults. Delete a line to fall back to built-in defaults.
+model = "small"    # whisper size; "medium" is more accurate but much slower on CPU
+device = "auto"    # auto | cuda | cpu

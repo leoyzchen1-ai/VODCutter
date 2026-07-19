@@ -1,0 +1,21 @@
+VODCutter is installed.
+
+Next steps (open a NEW terminal so the updated PATH is picked up):
+
+  1. cutter new myjob
+     Creates Documents\CutterJobs\myjob with a recap.txt template.
+
+  2. Copy your VOD (.mp4) into that folder and replace recap.txt with your
+     recap script: ONE flowing paragraph of prose describing everything the
+     video should cover, in order.
+
+  3. cutter run myjob
+     The first run downloads two AI models (~1 GB total) and then runs the
+     whole pipeline. Later runs reuse the downloaded models.
+
+  4. In DaVinci Resolve: import the VOD onto a timeline, then
+     Workspace > Scripts > resolve_cut
+     A "myjob Recap" timeline appears automatically.
+
+Config: %APPDATA%\cutter\config.toml (model size, GPU/CPU, thresholds).
+Jobs:   Documents\CutterJobs\

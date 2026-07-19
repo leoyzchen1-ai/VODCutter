@@ -1,0 +1,11 @@
+# Runtime dependencies shipped inside the installer payload.
+# Pins mirror requirements.txt; excludes dev tools (pytest) and legacy-only deps (scikit-learn).
+faster-whisper==1.2.1
+huggingface-hub==1.24.0
+tokenizers==0.22.2
+av==18.0.0
+numpy==2.5.1
+pillow==12.3.0
+onnxruntime==1.27.0
+rapidocr-onnxruntime==1.4.4
+pysbd==0.3.4
